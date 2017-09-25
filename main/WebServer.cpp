@@ -916,27 +916,50 @@ namespace http {
 				)
 				return;
 
-			std::string rememberme = request::findValue(&req, "rememberme");
-
-			std::string usrname;
-			std::string usrpass;
-			if (request_handler::url_decode(tmpusrname, usrname))
-			{
-				if (request_handler::url_decode(tmpusrpass, usrpass))
+				std::string host=session.remote_host;
+	
+				if (host=="127.0.0.1")
 				{
-					usrname = base64_decode(usrname);
-					int iUser = FindUser(usrname.c_str());
-					if (iUser == -1) {
-						// log brute force attack
-						_log.Log(LOG_ERROR, "Failed login attempt from %s for user '%s' !", session.remote_host.c_str(), usrname.c_str());
-						return;
+
+					//Check if we have the "X-Forwarded-For" (connection via proxy)
+					const char *host_header=request::get_req_header(&req, "X-Forwarded-For");
+					if (host_header!=NULL)
+					{
+						host=host_header;
+						if (strstr(host_header,",")!=NULL)
+						{
+							//Multiple proxies are used... this is not very common
+							host_header=request::get_req_header(&req, "X-Real-IP"); //try our NGINX header
+							if (host_header)
+							{
+								host=host_header;
+							}
+							
+						}
 					}
-					if (m_users[iUser].Password != usrpass) {
-						// log brute force attack
-						_log.Log(LOG_ERROR, "Failed login attempt from %s for '%s' !", session.remote_host.c_str(), m_users[iUser].Username.c_str());
-						return;
-					}
-					_log.Log(LOG_STATUS, "Login successful from %s for user '%s'", session.remote_host.c_str(), m_users[iUser].Username.c_str());
+				}
+
+				std::string rememberme = request::findValue(&req, "rememberme");
+
+				std::string usrname;
+				std::string usrpass;
+				if (request_handler::url_decode(tmpusrname, usrname))
+				{
+					if (request_handler::url_decode(tmpusrpass, usrpass))
+					{
+						usrname = base64_decode(usrname);
+						int iUser = FindUser(usrname.c_str());
+						if (iUser == -1) {
+							// log brute force attack
+							_log.Log(LOG_ERROR, "Failed login attempt from %s for user '%s' !", host.c_str(), usrname.c_str());
+							return;
+						}
+						if (m_users[iUser].Password != usrpass) {
+							// log brute force attack
+							_log.Log(LOG_ERROR, "Failed login attempt from %s for '%s' !", host.c_str(), m_users[iUser].Username.c_str());
+							return;
+						}
+					_log.Log(LOG_STATUS, "Login successful from %s for user '%s'", host.c_str(), m_users[iUser].Username.c_str());
 					root["status"] = "OK";
 					root["version"] = szAppVersion;
 					root["title"] = "logincheck";
